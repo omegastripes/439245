@@ -9,6 +9,10 @@ Installation
     pip install telethon aiohttp # or pip install -r requirements.txt
     chmod +x bot.py
 
+Config
+
+Specify either `bot_token` or `phone_number`
+
 Run
 
     ./bot.py

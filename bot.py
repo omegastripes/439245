@@ -2,6 +2,8 @@
 
 import asyncio
 from telethon import TelegramClient, events
+from telethon.errors import SessionPasswordNeededError
+import getpass
 import json
 import sys
 import logging
@@ -36,38 +38,58 @@ def create_logger(verbose=True, filename='', file_wipe=True):
 
 async def bot():
     global client
-    logger.info('Bot init')
-    client = TelegramClient(cfg.session_name, cfg.api_id, cfg.api_hash)
-    await client.connect()
-    if not await client.is_user_authorized():
-        await client.sign_in(bot_token=cfg.bot_token)
-
-
-    @client.on(events.NewMessage())
-    async def new_message(event):
-        text = event.message.text
-        logger.info('Message: ' + json.dumps({
-            'text': text,
-            'chat_id': event.chat_id,
-            'message_id': event._message_id
-        }))
-        if text != '':
-            data = extract_data(text)
-            if data:
-                await call_webhook(data)
-
-
-    await client.start()
-    me = await client.get_me()
-    logger.info('Bot ready, id ' + str(me.id))
+    
     while 1:
         try:
+            if hasattr(cfg, 'phone_number'):
+                logger.info('Userbot init')
+                session_name = cfg.phone_number
+                client = TelegramClient(session_name, cfg.api_id, cfg.api_hash)
+                await client.connect()
+                if not await client.is_user_authorized():
+                    logger.info('Userbot login')
+                    await client.send_code_request(cfg.phone_number)
+                    code = input('Enter code from Telegram:')
+                    try:
+                        await client.sign_in(code=code)
+                    except SessionPasswordNeededError:
+                        await client.sign_in(password=getpass.getpass())
+            elif hasattr(cfg, 'bot_token'):
+                logger.info('Bot init')
+                session_name = cfg.bot_token.split(':')[0]
+                client = TelegramClient(session_name, cfg.api_id, cfg.api_hash)
+                await client.connect()
+                if not await client.is_user_authorized():
+                    logger.info('Bot login')
+                    await client.sign_in(bot_token=cfg.bot_token)
+            else:
+                logger.info('Credentials missing, init failed')
+                return
+
+
+            @client.on(events.NewMessage(chats=cfg.chats))
+            async def new_message(event):
+                text = event.message.text
+                logger.info('Message: ' + json.dumps({
+                    'text': text,
+                    'chat_id': event.chat_id,
+                    'message_id': event._message_id
+                }))
+                if text != '':
+                    data = extract_data(text)
+                    if data:
+                        await call_webhook(data)
+            
+            
+            await client.start()
+            me = await client.get_me()
+            logger.info('Ready | id ' + str(me.id) + (' | @' + me.username if me.username else ''))
             await client.run_until_disconnected()
+
         except ConnectionError:
-            logger.info('Bot connection error, delay 60 sec')
-            asyncio.sleep(60)
-            logger.info('Bot retry')
-            continue
+            logger.info('Connection error, delay 60 sec')
+            await asyncio.sleep(60)
+            logger.info('Retry')
 
 
 def extract_data(text):
