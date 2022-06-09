@@ -63,7 +63,7 @@ async def bot():
                     logger.info('Bot login')
                     await client.sign_in(bot_token=cfg.bot_token)
             else:
-                logger.info('Credentials missing, init failed')
+                logger.info('Config credentials missing, init failed')
                 return
 
 
